@@ -1,0 +1,6 @@
+.pio
+.pio/
+.vscode/
+.idea/
+data/
+.DS_Store
