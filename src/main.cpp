@@ -120,16 +120,17 @@ void loop() {
 
 
 
-    if (closed_pin_new_state == LOW && open_pin_new_state == LOW) {
-        Serial.println("How is it possible, both sensors detect magnet");
-        status_code = -2;
-    } else if (closed_pin_new_state == HIGH && open_pin_new_state == HIGH) {
-        Serial.println("Both sensor detects no magnet, door is in unknown state");
-        status_code = -1;
-    } else if (closed_pin_new_state == LOW && open_pin_new_state == HIGH) {
+    // if (closed_pin_new_state == LOW && open_pin_new_state == LOW) {
+    //     Serial.println("How is it possible, both sensors detect magnet");
+    //     status_code = -2;
+    // } else if (closed_pin_new_state == HIGH && open_pin_new_state == HIGH) {
+    //     Serial.println("Both sensor detects no magnet, door is in unknown state");
+    //     status_code = -1;
+    // } else if (closed_pin_new_state == LOW && open_pin_new_state == HIGH) {
+    if (closed_pin_new_state == LOW || open_pin_new_state == HIGH) {
         Serial.println("Door closed sensor detects magnet, door is closed");
         status_code = 1;
-    } else if (closed_pin_new_state == HIGH && open_pin_new_state == LOW) {
+    } else if (closed_pin_new_state == HIGH || open_pin_new_state == LOW) {
         Serial.println("Door open sensor detects magnet, door is open");
         status_code = 0;
     }
@@ -142,8 +143,8 @@ void loop() {
         else if (status_code == 0) payload = "open";
         else if (status_code == -1) payload = "unknown";
         // else if (status_code == -1) payload = "open";
-        // else if (status_code == -2) payload = "wtf";
-        else if (status_code == -2) payload = "closed";
+        else if (status_code == -2) payload = "wtf";
+        // else if (status_code == -2) payload = "closed";
         mqtt_client.publish(publish_topic, payload.c_str(), true);
         pin_change = false;
     }
