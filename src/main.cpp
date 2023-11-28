@@ -19,11 +19,15 @@ char user[50];
 char password[50];
 
 const char* publish_topic = "home/stat/garage_door_state";
-bool should_publish = false;
 int status_code; // -2 wtf, -1 unknown, 0 open, 1 closed
 
 volatile bool pin_change = true; // for initial status update
 
+volatile int open_pin_previous_state = LOW;
+volatile int closed_pin_previous_state = LOW;
+
+volatile int open_pin_new_state = LOW;
+volatile int closed_pin_new_state = LOW;
 
 void reconnect() {
     while (!mqtt_client.connected()) {
@@ -36,10 +40,10 @@ void reconnect() {
     Serial.println("MQTT Connected");
 }
 
-void IRAM_ATTR sensorPinStateChange() {
-
-    pin_change = true;
-}
+//void IRAM_ATTR sensorPinStateChange() {
+//
+//    pin_change = true;
+//}
 
 void setup() {
 
@@ -90,12 +94,18 @@ void setup() {
     pinMode(DOOR_OPEN_SENSOR_PIN, INPUT_PULLUP);
     pinMode(DOOR_CLOSED_SENSOR_PIN, INPUT_PULLUP);
 
-    attachInterrupt(DOOR_CLOSED_SENSOR_PIN, sensorPinStateChange, CHANGE);
-    attachInterrupt(DOOR_OPEN_SENSOR_PIN, sensorPinStateChange, CHANGE);
+    open_pin_previous_state = digitalRead(DOOR_OPEN_SENSOR_PIN);
+    closed_pin_previous_state = digitalRead(DOOR_CLOSED_SENSOR_PIN);
+
+//    attachInterrupt(DOOR_CLOSED_SENSOR_PIN, sensorPinStateChange, CHANGE);
+//    attachInterrupt(DOOR_OPEN_SENSOR_PIN, sensorPinStateChange, CHANGE);
 
 }
 
 void loop() {
+
+    open_pin_new_state = digitalRead(DOOR_OPEN_SENSOR_PIN);
+    closed_pin_new_state = digitalRead(DOOR_CLOSED_SENSOR_PIN);
 
     if (WiFi.status() == WL_CONNECTED && !mqtt_client.connected()) {
         reconnect();
@@ -104,36 +114,44 @@ void loop() {
         ESP.restart();
     }
 
-    int pin_state_open_sensor = digitalRead(DOOR_OPEN_SENSOR_PIN);
-    int pin_state_closed_sensor = digitalRead(DOOR_CLOSED_SENSOR_PIN);
+    if (open_pin_previous_state != open_pin_new_state || closed_pin_previous_state != closed_pin_new_state) {
+        pin_change = true;
+    }
 
 
-    if (pin_state_closed_sensor == LOW && pin_state_open_sensor == LOW) {
+
+    if (closed_pin_new_state == LOW && open_pin_new_state == LOW) {
         Serial.println("How is it possible, both sensors detect magnet");
         status_code = -2;
-    } else if (pin_state_closed_sensor == HIGH && pin_state_open_sensor == HIGH) {
+    } else if (closed_pin_new_state == HIGH && open_pin_new_state == HIGH) {
         Serial.println("Both sensor detects no magnet, door is in unknown state");
-        should_publish = true;
         status_code = -1;
-    } else if (pin_state_closed_sensor == LOW && pin_state_open_sensor == HIGH) {
+    } else if (closed_pin_new_state == LOW && open_pin_new_state == HIGH) {
         Serial.println("Door closed sensor detects magnet, door is closed");
-        should_publish = true;
         status_code = 1;
-    } else if (pin_state_closed_sensor == HIGH && pin_state_open_sensor == LOW) {
+    } else if (closed_pin_new_state == HIGH && open_pin_new_state == LOW) {
         Serial.println("Door open sensor detects magnet, door is open");
-        should_publish = true;
         status_code = 0;
     }
 
-    if (should_publish && pin_change) {
+    // the problem is the open pin always stay low
+
+    if (pin_change) {
         String payload = "";
         if (status_code == 1) payload = "closed";
         else if (status_code == 0) payload = "open";
         else if (status_code == -1) payload = "unknown";
+        // else if (status_code == -1) payload = "open";
+        // else if (status_code == -2) payload = "wtf";
+        else if (status_code == -2) payload = "closed";
         mqtt_client.publish(publish_topic, payload.c_str(), true);
-        should_publish = false;
         pin_change = false;
     }
 
-    vTaskDelay(800 / portTICK_PERIOD_MS);
+
+
+    open_pin_previous_state = open_pin_new_state;
+    closed_pin_previous_state = closed_pin_new_state;
+
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
 }
